@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Request, status, HTTPException
 from app.database import Database, get_db
-
+import uuid
 from app.models.schemas import APIResponse, AccountCreate, Account, TransferRequest, CustomerCreate
 from app.services.banking_service import BankingService
 from app.models.schemas import UserRegister, UserLogin, Token
@@ -13,6 +13,7 @@ from app.utils.exceptions import SelfTransferException
 from datetime import datetime, timezone
 from app.database_sqlite import get_db as get_sqlite_db
 from app.database_sqlite import CustomerDB
+from app.models.schemas import TopUpRequest
 
 logger = logging.getLogger(__name__)
 
