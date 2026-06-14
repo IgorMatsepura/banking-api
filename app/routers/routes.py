@@ -300,3 +300,38 @@ async def debug_sqlite_customers(db=Depends(get_sqlite_db)):
 @router.get("/debug/db-instance")
 async def debug_db_instance(db: Database = Depends(get_db)):
     return {"db_id": id(db), "customers": db.customers}
+
+@router.post("/topup", response_model=APIResponse)
+async def top_up_account(
+    topup: TopUpRequest,
+    service: BankingService = Depends(get_banking_service),
+    current_user: dict = Depends(get_current_user)
+):
+    """Top up account"""
+    account = service.db.get_account(topup.account_id)
+    
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    
+    if account.customer_id != current_user["customer_id"]:
+        raise HTTPException(status_code=403, detail="You don't own this account")
+    
+    # Add funds
+    account.balance += topup.amount
+    
+    # Create transaction record
+    transfer = {
+        "id": str(uuid.uuid4()),
+        "from_account_id": "EXTERNAL",
+        "to_account_id": topup.account_id,
+        "amount": topup.amount,
+        "currency": topup.currency,
+        "created_at": datetime.now().isoformat()
+    }
+    service.db.add_transfer(transfer)
+    
+    return APIResponse(
+        status="success",
+        data={"balance": account.balance, "currency": account.currency},
+        message="Top up successful"
+    )

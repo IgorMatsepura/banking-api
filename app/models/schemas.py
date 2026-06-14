@@ -98,3 +98,8 @@ class UserLogin(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+class TopUpRequest(BaseModel):
+    account_id: str
+    amount: float
+    currency: str = "UAH" 
