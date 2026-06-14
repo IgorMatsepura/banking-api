@@ -1,18 +1,15 @@
 from fastapi import APIRouter, Depends, Request, status, HTTPException
-from app.database import Database, get_db
-
 from app.models.schemas import APIResponse, AccountCreate, Account, TransferRequest, CustomerCreate
 from app.services.banking_service import BankingService
 from app.models.schemas import UserRegister, UserLogin, Token
 from app.utils.auth import get_password_hash, verify_password, create_access_token, get_current_user
 from app.utils.auth import get_current_user
 from app.database import Database, get_db
+from app.database.sqlite_db import Account as AccountModel
 from app.services.bin_checker import get_card_info
 import logging
 from app.utils.exceptions import SelfTransferException
 from datetime import datetime, timezone
-from app.database_sqlite import get_db as get_sqlite_db
-from app.database_sqlite import CustomerDB
 
 logger = logging.getLogger(__name__)
 
@@ -54,13 +51,8 @@ async def create_account(
     """
     
     # Використовуємо customer_id з токена, а не з запиту
-    created_account = service.create_account(current_user["customer_id"], account.initial_deposit, account.currency)
-    account_obj = Account(
-    account_id=created_account.account_id,
-    customer_id=created_account.customer_id,
-    balance=created_account.balance,
-    currency=created_account.currency
-    )
+    created_account = service.create_account(current_user["customer_id"], account.initial_deposit)
+    account_obj = Account(**created_account)
     return APIResponse(  
         status="success", 
         data=account_obj,
@@ -173,10 +165,10 @@ async def create_customer(customer: CustomerCreate, db: Database = Depends(get_d
     """Створює нового клієнта в системі."""
     # Перевірка, чи email вже існує
     for existing in db.customers.values():
-        if existing["email"] == customer["email"]:
+        if existing["email"] == customer.email:
             raise HTTPException(status_code=400, detail="Customer with this email already exists")
     
-    new_customer = db.create_customer(customer.name, customer["email"])
+    new_customer = db.create_customer(customer.name, customer.email)
     return new_customer
 
 @router.get("/customers/{customer_id}")
@@ -189,7 +181,7 @@ async def get_customer(
     if customer_id != current_user["customer_id"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    customer = db.get_customer_by_id(customer_id)
+    customer = db.get_customer(customer_id)
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     return customer
@@ -212,18 +204,18 @@ async def login(user: UserLogin, db: Database = Depends(get_db)):
     # Тимчасове рішення – шукаємо через перебір ID
     found_customer = None
     for i in range(1, 100):  # Перевіряємо ID 1-99
-        customer = db.get_customer_by_id(i)
-        if customer and customer["email"] == user.email:
+        customer = db.get_customer(i)
+        if customer and customer.email == user.email:
             found_customer = customer
             break
     
     if not found_customer:
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
-    if not verify_password(user.password, found_customer["hashed_password"]):
+    if not verify_password(user.password, found_customer.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
-    access_token = create_access_token(data={"sub": str(found_customer["customer_id"])})
+    access_token = create_access_token(data={"sub": str(found_customer.customer_id)})
     
     return {"access_token": access_token, "token_type": "bearer"}    
 
@@ -241,16 +233,22 @@ async def get_my_accounts(
     db: Database = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    accounts = db.get_accounts_by_customer(current_user["customer_id"])
-    return [
-        {
-            "account_id": acc.account_id,
-            "balance": acc.balance,
-            "currency": acc.currency
-        }
-        for acc in accounts
-    ]
-            
+    session = db.get_db_session()
+    try:
+        accounts = session.query(AccountModel).filter(
+            AccountModel.customer_id == current_user["customer_id"]
+        ).all()
+        return [
+            {
+                "account_id": acc.account_id,
+                "balance": acc.balance,
+                "currency": "UAH"
+            }
+            for acc in accounts
+        ]
+    finally:
+        session.close()
+
 @router.get("/check-card/{card_number}")
 async def check_card_info(
     card_number: str,
@@ -280,23 +278,3 @@ async def check_card_info(
         "card_type": card_info.get("card_type"),
         "card_level": card_info.get("card_level")
     }
-
-@router.get("/debug/customers")
-async def debug_customers(db: Database = Depends(get_db)):
-    return {"customers": db.customers}
-
-@router.get("/debug/sqlite-customers")
-async def debug_sqlite_customers(db=Depends(get_sqlite_db)):
-    customers = db.query(CustomerDB).all()
-    return [
-        {
-            "customer_id": c.customer_id,
-            "name": c.name,
-            "email": c.email
-        }
-        for c in customers
-    ]
-
-@router.get("/debug/db-instance")
-async def debug_db_instance(db: Database = Depends(get_db)):
-    return {"db_id": id(db), "customers": db.customers}

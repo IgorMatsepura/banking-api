@@ -34,7 +34,10 @@ class BankingService:
         if not self.db.get_customer(customer_id):
             logger.warning(f"Account creation failed: Customer {customer_id} not found")
             raise CustomerNotFoundException()  
-        return self.db.create_account(customer_id, initial_deposit, currency)
+        return self.db.create_account(customer_id, initial_deposit, currency)curl -X POST "http://localhost:8000/api/v1/accounts" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"initial_deposit": 1000.0, "currency": "USD"}'
 
     def get_balance(self, account_id: str) -> float:
         """Retrieve the current balance for a specific account.

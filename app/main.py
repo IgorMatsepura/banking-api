@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.routers.routes import router
-from app.database.db import Database
+from app.database import get_db
 import logging
 from dotenv import load_dotenv
 import os
@@ -25,9 +25,11 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down Banking API")  # Runs on shutdown
 
 app = FastAPI(title="Banking API", version="1.0.0", description="Internal API for banking operations", lifespan=lifespan)
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "message": "Banking API is running"}
 
-
-app.state.db = Database()
+app.state.db = get_db()
 app.state.banking_service = BankingService(app.state.db)
 
 app.add_exception_handler(AccountNotFoundException,AccountNotFoundExceptionHandler)
@@ -37,4 +39,6 @@ app.add_exception_handler(SelfTransferException,SelfTransferExceptionHandler)
 
 
 app.include_router(router)
+
+
 

@@ -12,9 +12,8 @@ class Customer(BaseModel):
 
 class AccountCreate(BaseModel):
     """Model for creating a new bank account."""
-    customer_id: int 
     initial_deposit: float = Field(ge=0, le=1_000_000, description="Initial deposit amount must be between 0 and 1000000")
-
+    currency: str = Field(default="UAH", description="Currency code (UAH, USD, EUR, GBP, PLN)")
     
     @field_validator("initial_deposit")
     def check_deposit_precision(cls, value):
@@ -82,3 +81,20 @@ class APIResponse(BaseModel):
     message: str
     error_code: Optional[int] = None
     timestamp : datetime
+
+class CustomerCreate(BaseModel):
+    name: str
+    email: str
+
+class UserRegister(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
